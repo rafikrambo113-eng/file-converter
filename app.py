@@ -49,9 +49,12 @@ st.markdown(
         direction: rtl;
         max-width: 1150px;
     }
-    h1, h2, h3, p, label, .stMarkdown {
+    h1, h2, h3, p, label, .stMarkdown, .stMarkdown p,
+    .stCaption, [data-testid="stCaptionContainer"],
+    .stSelectbox label, .stTextInput label, .stFileUploader label,
+    .stSlider label, .stCheckbox label, .stNumberInput label {
         text-align: right;
-        color: #e8e6f0;
+        color: #ffffff !important;
     }
 
     /* Glowing hero title */
@@ -108,7 +111,7 @@ st.markdown(
         filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.3));
     }
 
-    /* Buttons — bold, clearly visible neon gradient */
+    /* Buttons — bold, clearly visible neon gradient, white text */
     .stButton>button, .stDownloadButton>button {
         width: 100%;
         border-radius: 12px;
@@ -116,15 +119,17 @@ st.markdown(
         font-size: 1.0rem;
         padding: 0.75rem;
         border: 2px solid var(--neon-cyan);
-        background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
-        color: #050208;
+        background: linear-gradient(90deg, #c2005f, #0099ab);
+        color: #ffffff;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
         box-shadow: 0 0 16px rgba(0, 240, 255, 0.5), 0 0 10px rgba(255, 0, 127, 0.4);
         transition: all 0.2s ease;
         letter-spacing: 0.3px;
     }
     .stButton>button p, .stDownloadButton>button p {
-        color: #050208 !important;
+        color: #ffffff !important;
         font-weight: 900 !important;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
     }
     .stButton>button:hover, .stDownloadButton>button:hover {
         border: 2px solid #ffffff;
@@ -137,17 +142,19 @@ st.markdown(
 
     /* Card buttons inside the tool grid — plain-ish tile look, not a pill */
     div[data-testid="stVerticalBlockBorderWrapper"] .stButton>button {
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(0, 240, 255, 0.3);
-        color: #e8e6f0;
+        color: #ffffff;
+        text-shadow: none;
         box-shadow: none;
         font-weight: 700;
         font-size: 0.92rem;
         padding: 0.5rem;
     }
     div[data-testid="stVerticalBlockBorderWrapper"] .stButton>button p {
-        color: #e8e6f0 !important;
+        color: #ffffff !important;
         font-weight: 700 !important;
+        text-shadow: none;
     }
     div[data-testid="stVerticalBlockBorderWrapper"] .stButton>button:hover {
         border: 1px solid var(--neon-pink);
@@ -158,14 +165,15 @@ st.markdown(
     /* Back button styled distinctly */
     .back-btn .stButton>button {
         width: auto;
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(0, 240, 255, 0.35);
-        color: #e8e6f0;
+        color: #ffffff;
+        text-shadow: none;
         box-shadow: none;
         font-weight: 700;
         padding: 0.4rem 1rem;
     }
-    .back-btn .stButton>button p { color: #e8e6f0 !important; }
+    .back-btn .stButton>button p { color: #ffffff !important; text-shadow: none; }
 
     /* File uploader glow border */
     [data-testid="stFileUploaderDropzone"] {
@@ -184,16 +192,19 @@ st.markdown(
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Hide Streamlit Cloud toolbar (GitHub / Star / Fork / Edit / Share / Deploy) */
+    /* Hide Streamlit Cloud toolbar and "Manage app" badge (GitHub / Star / Fork / Edit / Share / Deploy) */
     [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
+    [data-testid="stToolbarActions"] {visibility: hidden !important; display: none !important;}
     [data-testid="stDecoration"] {display: none !important;}
     [data-testid="stStatusWidget"] {visibility: hidden !important; display: none !important;}
-    .stDeployButton {display: none !important;}
+    [data-testid="manage-app-button"] {display: none !important;}
+    .stAppDeployButton {display: none !important;}
+    .stAppToolbar {display: none !important;}
     #stDecoration {display: none !important;}
-    .viewerBadge_container__1QSob,
-    .viewerBadge_link__1S137,
-    .viewerBadge_text__1JaDK {display: none !important;}
+    [class^="viewerBadge"], [class*="viewerBadge"] {display: none !important;}
     a[href*="github.com"] {display: none !important;}
+    a[href*="share.streamlit.io"] {display: none !important;}
+    iframe[title="streamlit_menu_iframe"] {display: none !important;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -328,6 +339,30 @@ SECTIONS = [
 ]
 
 POPULAR_TOOLS = ["docx2pdf", "pdf2docx", "images2pdf", "pdf2images", "xlsx2pdf", "pptx2pdf"]
+
+# مسمّيات الصيغ لدروب داون "من / إلى" السريع
+EXT_LABELS = {
+    "docx": "📝 Word (.docx)", "doc": "📝 Word 97-2003 (.doc)",
+    "odt": "📝 OpenDocument Text (.odt)", "rtf": "📝 مستند RTF (.rtf)",
+    "txt": "📄 نص عادي (.txt)", "html": "🌐 HTML (.html)",
+    "pdf": "📕 PDF", "xlsx": "📊 Excel (.xlsx)", "xls": "📊 Excel 97-2003 (.xls)",
+    "ods": "📊 OpenDocument Spreadsheet (.ods)", "csv": "🧮 CSV",
+    "pptx": "📽️ PowerPoint (.pptx)", "ppt": "📽️ PowerPoint 97-2003 (.ppt)",
+    "odp": "📽️ OpenDocument Presentation (.odp)", "images": "🖼️ صور (Images)",
+    "png": "🖼️ PNG", "jpg": "🖼️ JPG", "webp": "🖼️ WEBP", "bmp": "🖼️ BMP",
+    "gif": "🖼️ GIF", "tiff": "🖼️ TIFF",
+}
+
+# كل زوج (من, إلى) مدعوم وموصّل بالأداة اللي بتنفّذه
+PAIR_TO_TOOL = {
+    (t["from"], t["to"]): tid
+    for tid, t in TOOLS.items()
+    if t.get("from") and t.get("to")
+}
+FROM_KEYS_SORTED = sorted(
+    {k[0] for k in PAIR_TO_TOOL.keys()},
+    key=lambda k: EXT_LABELS.get(k, k),
+)
 
 if "active_tool" not in st.session_state:
     st.session_state.active_tool = None
