@@ -22,16 +22,29 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------------------------------
-# Styling — RTL, Arabic font, clean dark theme
+# Styling — RamboAITV space theme: dark radial gradient, neon pink/cyan,
+# Orbitron for headings + Cairo for Arabic body text
 # ----------------------------------------------------------------------------
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Cairo:wght@400;600;800&display=swap');
 
-    html, body, [class*="css"]  {
+    :root {
+        --neon-pink: #ff007f;
+        --neon-cyan: #00f0ff;
+    }
+
+    html, body, [class*="css"] {
         font-family: 'Cairo', sans-serif;
     }
+
+    /* Deep space background */
+    .stApp {
+        background: radial-gradient(ellipse at top, #1a0b2e 0%, #0d0518 45%, #050208 100%);
+        background-attachment: fixed;
+    }
+
     .main .block-container {
         direction: rtl;
     }
@@ -40,29 +53,83 @@ st.markdown(
     }
     h1, h2, h3, p, label, .stMarkdown {
         text-align: right;
+        color: #e8e6f0;
     }
+
+    /* Glowing hero title */
     .converter-title {
         text-align: center;
-        font-weight: 800;
-        font-size: 2.2rem;
-        background: linear-gradient(90deg, #00c6a9, #0077ff);
+        font-family: 'Orbitron', 'Cairo', sans-serif;
+        font-weight: 900;
+        font-size: 2.6rem;
+        letter-spacing: 1px;
+        background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 25px rgba(255, 0, 127, 0.35);
         margin-bottom: 0;
+        animation: glow-pulse 3s ease-in-out infinite;
+    }
+    @keyframes glow-pulse {
+        0%, 100% { filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.35)); }
+        50% { filter: drop-shadow(0 0 18px rgba(255, 0, 127, 0.55)); }
     }
     .converter-subtitle {
         text-align: center;
-        color: #9aa0a6;
-        margin-top: 0;
-        margin-bottom: 1.5rem;
+        color: #a9a3c2;
+        margin-top: 0.2rem;
+        margin-bottom: 1.8rem;
+        font-size: 1rem;
     }
-    .stButton>button {
+
+    /* Tabs styled as neon cards */
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(0, 240, 255, 0.25);
+        border-radius: 12px 12px 0 0;
+        color: #e8e6f0 !important;
+        font-weight: 700;
+        padding: 0.5rem 1.2rem;
+    }
+    .stTabs [aria-selected="true"] {
+        border: 1px solid var(--neon-cyan);
+        box-shadow: 0 0 14px rgba(0, 240, 255, 0.45);
+        color: var(--neon-cyan) !important;
+    }
+
+    /* Card-like containers */
+    div[data-testid="stVerticalBlockBorderWrapper"],
+    .stFileUploader, .stSelectbox, .stSlider {
+        border-radius: 14px;
+    }
+
+    /* Buttons — neon gradient with glow */
+    .stButton>button, .stDownloadButton>button {
         width: 100%;
-        border-radius: 10px;
-        font-weight: 600;
-        padding: 0.6rem;
+        border-radius: 12px;
+        font-weight: 800;
+        padding: 0.65rem;
+        border: 1px solid rgba(0, 240, 255, 0.4);
+        background: linear-gradient(90deg, rgba(255,0,127,0.15), rgba(0,240,255,0.15));
+        color: #f5f4ff;
+        transition: all 0.25s ease;
     }
+    .stButton>button:hover, .stDownloadButton>button:hover {
+        border: 1px solid var(--neon-pink);
+        box-shadow: 0 0 18px rgba(255, 0, 127, 0.5), 0 0 18px rgba(0, 240, 255, 0.3);
+        color: #ffffff;
+        transform: translateY(-1px);
+    }
+
+    /* File uploader glow border */
+    [data-testid="stFileUploaderDropzone"] {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1.5px dashed rgba(0, 240, 255, 0.4) !important;
+        border-radius: 14px;
+    }
+
     footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -392,5 +459,12 @@ with tab_images:
         except Exception as e:
             st.error(f"حصل خطأ أثناء التحويل: {e}")
 
-st.markdown("---")
-st.caption("تصميم وتطوير: المهندس رفيق ناثان")
+st.markdown(
+    """
+    <hr style="border: none; height: 1px; background: linear-gradient(90deg, transparent, rgba(0,240,255,0.4), rgba(255,0,127,0.4), transparent); margin: 2rem 0 1rem;">
+    <p style="text-align:center; color:#8b85a8; font-size:0.85rem;">
+        تصميم وتطوير: <span style="color:#00f0ff;">المهندس رفيق ناثان</span>
+    </p>
+    """,
+    unsafe_allow_html=True,
+)
