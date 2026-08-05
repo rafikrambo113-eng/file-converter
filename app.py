@@ -5,10 +5,15 @@ import os
 import zipfile
 import io
 from pathlib import Path
+import shutil
 
 from PIL import Image
 import fitz  # PyMuPDF
-from pdf2docx import Converter
+try:
+    from pdf2docx import Converter
+    PDF2DOCX_AVAILABLE = True
+except Exception:
+    PDF2DOCX_AVAILABLE = False
 import pdfplumber
 import pandas as pd
 
@@ -22,14 +27,12 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------------------------------
-# Styling — RamboAITV space theme: dark radial gradient, neon pink/cyan,
-# Orbitron for headings + Cairo for Arabic body text, PDF24-style tool grid
+# Styling
 # ----------------------------------------------------------------------------
 st.markdown(
     """
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Cairo:wght@400;600;800&display=swap');
-
     :root {
         --neon-pink: #ff007f;
         --neon-cyan: #00f0ff;
@@ -39,7 +42,6 @@ st.markdown(
         font-family: 'Cairo', sans-serif;
     }
 
-    /* Deep space background */
     .stApp {
         background: radial-gradient(ellipse at top, #1a0b2e 0%, #0d0518 45%, #050208 100%);
         background-attachment: fixed;
@@ -54,7 +56,6 @@ st.markdown(
         color: #e8e6f0;
     }
 
-    /* Glowing hero title */
     .converter-title {
         text-align: center;
         font-family: 'Orbitron', 'Cairo', sans-serif;
@@ -89,26 +90,26 @@ st.markdown(
         text-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
     }
 
-    /* Card-like bordered containers used for the tool grid */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
+    .tool-card {
         background: rgba(255, 255, 255, 0.035);
-        border: 1px solid rgba(0, 240, 255, 0.22) !important;
-        border-radius: 16px !important;
+        border: 1px solid rgba(0, 240, 255, 0.22);
+        border-radius: 16px;
+        padding: 1rem;
+        text-align: center;
         transition: all 0.2s ease;
+        margin-bottom: 0.5rem;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border: 1px solid var(--neon-cyan) !important;
+    .tool-card:hover {
+        border: 1px solid var(--neon-cyan);
         box-shadow: 0 0 18px rgba(0, 240, 255, 0.35);
         transform: translateY(-3px);
     }
     .tool-icon {
-        text-align: center;
         font-size: 2.3rem;
         margin-bottom: 0.2rem;
         filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.3));
     }
 
-    /* Buttons — bold, clearly visible neon gradient */
     .stButton>button, .stDownloadButton>button {
         width: 100%;
         border-radius: 12px;
@@ -122,59 +123,43 @@ st.markdown(
         transition: all 0.2s ease;
         letter-spacing: 0.3px;
     }
-    .stButton>button p, .stDownloadButton>button p {
-        color: #050208 !important;
-        font-weight: 900 !important;
-    }
     .stButton>button:hover, .stDownloadButton>button:hover {
         border: 2px solid #ffffff;
         box-shadow: 0 0 26px rgba(255, 0, 127, 0.75), 0 0 26px rgba(0, 240, 255, 0.6);
         transform: translateY(-2px) scale(1.01);
     }
-    .stButton>button:active, .stDownloadButton>button:active {
-        transform: translateY(0) scale(0.99);
-    }
 
-    /* Card buttons inside the tool grid — plain-ish tile look, not a pill */
-    div[data-testid="stVerticalBlockBorderWrapper"] .stButton>button {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(0, 240, 255, 0.3);
-        color: #e8e6f0;
-        box-shadow: none;
-        font-weight: 700;
-        font-size: 0.92rem;
-        padding: 0.5rem;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"] .stButton>button p {
+    .card-btn button {
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(0, 240, 255, 0.3) !important;
         color: #e8e6f0 !important;
+        box-shadow: none !important;
         font-weight: 700 !important;
+        font-size: 0.92rem !important;
+        padding: 0.5rem !important;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"] .stButton>button:hover {
-        border: 1px solid var(--neon-pink);
-        color: #ffffff;
-        box-shadow: 0 0 10px rgba(255, 0, 127, 0.45);
+    .card-btn button:hover {
+        border: 1px solid var(--neon-pink) !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 10px rgba(255, 0, 127, 0.45) !important;
     }
 
-    /* Back button styled distinctly */
-    .back-btn .stButton>button {
-        width: auto;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(0, 240, 255, 0.35);
-        color: #e8e6f0;
-        box-shadow: none;
-        font-weight: 700;
-        padding: 0.4rem 1rem;
+    .back-btn button {
+        width: auto !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(0, 240, 255, 0.35) !important;
+        color: #e8e6f0 !important;
+        box-shadow: none !important;
+        font-weight: 700 !important;
+        padding: 0.4rem 1rem !important;
     }
-    .back-btn .stButton>button p { color: #e8e6f0 !important; }
 
-    /* File uploader glow border */
     [data-testid="stFileUploaderDropzone"] {
         background: rgba(255, 255, 255, 0.02);
         border: 1.5px dashed rgba(0, 240, 255, 0.4) !important;
         border-radius: 14px;
     }
 
-    /* Search box */
     .stTextInput input {
         border-radius: 12px;
         border: 1.5px solid rgba(0, 240, 255, 0.3);
@@ -183,17 +168,9 @@ st.markdown(
     footer {visibility: hidden;}
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
-
-    /* Hide Streamlit Cloud toolbar (GitHub / Star / Fork / Edit / Share / Deploy) */
     [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
     [data-testid="stDecoration"] {display: none !important;}
-    [data-testid="stStatusWidget"] {visibility: hidden !important; display: none !important;}
     .stDeployButton {display: none !important;}
-    #stDecoration {display: none !important;}
-    .viewerBadge_container__1QSob,
-    .viewerBadge_link__1S137,
-    .viewerBadge_text__1JaDK {display: none !important;}
-    a[href*="github.com"] {display: none !important;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -209,8 +186,19 @@ st.markdown(
 # Helpers
 # ----------------------------------------------------------------------------
 
+def check_soffice():
+    """Check if LibreOffice soffice is available."""
+    return shutil.which("soffice") is not None
+
+
 def soffice_convert(input_path: str, target_format: str, outdir: str) -> str:
     """Convert a file using headless LibreOffice. Returns output file path."""
+    if not check_soffice():
+        raise RuntimeError(
+            "❌ LibreOffice مش موجود على الجهاز.\n"
+            "لو شغال على الكمبيوتر: ثبّت LibreOffice من الموقع الرسمي.\n"
+            "لو شغال على Streamlit Cloud: أنشئ ملف packages.txt واكتب فيه 'libreoffice'."
+        )
     cmd = [
         "soffice", "--headless", "--norestore",
         "--convert-to", target_format,
@@ -282,10 +270,9 @@ MIME = {
 }
 
 # ----------------------------------------------------------------------------
-# Tool registry — every card = one fixed "من / إلى" pair, PDF24-style
+# Tool registry
 # ----------------------------------------------------------------------------
 TOOLS = {
-    # ---- تحويل إلى PDF ----
     "docx2pdf":  {"icon": "📝", "label": "Word إلى PDF",              "from": "docx", "to": "pdf", "cat": "to_pdf"},
     "doc2pdf":   {"icon": "📝", "label": "Word 97-2003 إلى PDF",      "from": "doc",  "to": "pdf", "cat": "to_pdf"},
     "odt2pdf":   {"icon": "📝", "label": "ODT إلى PDF",                "from": "odt",  "to": "pdf", "cat": "to_pdf"},
@@ -301,7 +288,6 @@ TOOLS = {
     "odp2pdf":   {"icon": "📽️", "label": "ODP إلى PDF",                "from": "odp",  "to": "pdf", "cat": "to_pdf"},
     "images2pdf":{"icon": "🖼️", "label": "الصور إلى PDF",              "from": "images", "to": "pdf", "cat": "to_pdf"},
 
-    # ---- تحويل من PDF ----
     "pdf2docx":  {"icon": "📕", "label": "PDF إلى Word",               "from": "pdf", "to": "docx",   "cat": "from_pdf"},
     "pdf2xlsx":  {"icon": "📕", "label": "PDF إلى Excel (استخراج جداول)", "from": "pdf", "to": "xlsx", "cat": "from_pdf"},
     "pdf2images":{"icon": "📕", "label": "PDF إلى صور",                "from": "pdf", "to": "images", "cat": "from_pdf"},
@@ -309,7 +295,6 @@ TOOLS = {
     "pdf2odt":   {"icon": "📕", "label": "PDF إلى ODT",                "from": "pdf", "to": "odt",    "cat": "from_pdf"},
     "pdf2html":  {"icon": "📕", "label": "PDF إلى HTML",               "from": "pdf", "to": "html",   "cat": "from_pdf"},
 
-    # ---- تحويل الصور ----
     "png2jpg":   {"icon": "🖼️", "label": "PNG إلى JPG",  "from": "png",  "to": "jpg", "cat": "images"},
     "jpg2png":   {"icon": "🖼️", "label": "JPG إلى PNG",  "from": "jpg",  "to": "png", "cat": "images"},
     "webp2jpg":  {"icon": "🖼️", "label": "WEBP إلى JPG", "from": "webp", "to": "jpg", "cat": "images"},
@@ -333,7 +318,7 @@ if "active_tool" not in st.session_state:
     st.session_state.active_tool = None
 
 # ============================================================================
-# HOME — grid of tool cards (PDF24 "all tools" style)
+# HOME
 # ============================================================================
 if st.session_state.active_tool is None:
     search = st.text_input("🔍 دوّر على أداة (مثال: Word, PDF, صور...)", value="")
@@ -353,11 +338,14 @@ if st.session_state.active_tool is None:
         for i, tid in enumerate(visible):
             tool = TOOLS[tid]
             with cols[i % cols_per_row]:
-                with st.container(border=True):
-                    st.markdown(f'<div class="tool-icon">{tool["icon"]}</div>', unsafe_allow_html=True)
+                with st.container():
+                    st.markdown(f'''<div class="tool-card">
+                        <div class="tool-icon">{tool["icon"]}</div>
+                        <div class="card-btn">''', unsafe_allow_html=True)
                     if st.button(tool["label"], key=f"card_{tid}", use_container_width=True):
                         st.session_state.active_tool = tid
                         st.rerun()
+                    st.markdown('</div></div>', unsafe_allow_html=True)
         return True
 
     if not search_l:
@@ -367,14 +355,14 @@ if st.session_state.active_tool is None:
     any_shown = False
     for cat_key, cat_title in SECTIONS:
         ids = [tid for tid, t in TOOLS.items() if t["cat"] == cat_key]
-        st.markdown(f'<p class="section-title">{cat_title}</p>', unsafe_allow_html=True)
+        st.markdown(f'''<p class="section-title">{cat_title}</p>''', unsafe_allow_html=True)
         shown = render_grid(ids)
         any_shown = any_shown or shown
         if not shown:
             st.caption("لا توجد أدوات مطابقة في هذا القسم.")
 
 # ============================================================================
-# TOOL PAGE — one specific converter (or the full image tool)
+# TOOL PAGE
 # ============================================================================
 else:
     tool_id = st.session_state.active_tool
@@ -390,7 +378,7 @@ else:
     st.markdown("---")
 
     # ------------------------------------------------------------------
-    # أداة تحويل الصور الشاملة (متعدد الملفات + جودة + تغيير حجم)
+    # أداة تحويل الصور الشاملة
     # ------------------------------------------------------------------
     if tool_id == "image_converter":
         files_up = st.file_uploader(
@@ -458,14 +446,12 @@ else:
     else:
         from_key, to_key = tool["from"], tool["to"]
 
-        # خيارات إضافية حسب نوع التحويل
         dpi = 150
         img_fmt = "PNG"
         if from_key == "pdf" and to_key == "images":
             dpi = st.slider("جودة الصور (DPI)", min_value=72, max_value=300, value=150, step=6)
             img_fmt = st.selectbox("صيغة الصور", ["PNG", "JPEG"])
 
-        # رفع الملف/الملفات
         f = None
         files_up = None
         if from_key == "images":
@@ -503,29 +489,32 @@ else:
         # ---- PDF -> Word ----
         elif from_key == "pdf" and to_key == "docx":
             if f and convert_clicked:
-                with tempfile.TemporaryDirectory() as td:
-                    in_path = os.path.join(td, f.name)
-                    with open(in_path, "wb") as out:
-                        out.write(f.getbuffer())
-                    out_path = os.path.join(td, Path(f.name).stem + ".docx")
-                    try:
-                        with st.spinner("جاري التحويل... (بياخد وقت أطول شوية)"):
-                            cv = Converter(in_path)
-                            cv.convert(out_path)
-                            cv.close()
-                        with open(out_path, "rb") as r:
-                            data = r.read()
-                        st.success("تم التحويل بنجاح ✅")
-                        st.download_button(
-                            "⬇️ تحميل ملف Word", data,
-                            file_name=Path(f.name).stem + ".docx", mime=MIME["docx"],
-                        )
-                    except Exception as e:
-                        st.error(f"حصل خطأ أثناء التحويل: {e}")
+                if not PDF2DOCX_AVAILABLE:
+                    st.error("❌ مكتبة pdf2docx مش متوفرة. نزّلها بالأمر: pip install pdf2docx")
+                else:
+                    with tempfile.TemporaryDirectory() as td:
+                        in_path = os.path.join(td, f.name)
+                        with open(in_path, "wb") as out:
+                            out.write(f.getbuffer())
+                        out_path = os.path.join(td, Path(f.name).stem + ".docx")
+                        try:
+                            with st.spinner("جاري التحويل... (بياخد وقت أطول شوية)"):
+                                cv = Converter(in_path)
+                                cv.convert(out_path)
+                                cv.close()
+                            with open(out_path, "rb") as r:
+                                data = r.read()
+                            st.success("تم التحويل بنجاح ✅")
+                            st.download_button(
+                                "⬇️ تحميل ملف Word", data,
+                                file_name=Path(f.name).stem + ".docx", mime=MIME["docx"],
+                            )
+                        except Exception as e:
+                            st.error(f"حصل خطأ أثناء التحويل: {e}")
             elif convert_clicked:
                 st.warning("ارفع ملف PDF الأول.")
 
-        # ---- PDF -> Excel (extract tables) ----
+        # ---- PDF -> Excel ----
         elif from_key == "pdf" and to_key == "xlsx":
             if f and convert_clicked:
                 with tempfile.TemporaryDirectory() as td:
@@ -619,7 +608,7 @@ else:
             elif convert_clicked:
                 st.warning("ارفع ملف PDF الأول.")
 
-        # ---- تحويل صورة لصورة مباشر (PNG/JPG/WEBP/BMP/GIF/TIFF) ----
+        # ---- Image -> Image ----
         elif from_key in IMAGE_EXT_SET and to_key in IMAGE_EXT_SET:
             if f and convert_clicked:
                 try:
@@ -644,7 +633,7 @@ else:
             elif convert_clicked:
                 st.warning("ارفع صورة الأول.")
 
-        # ---- كل تحويلات المستندات/الجداول/العروض التقديمية العامة عن طريق LibreOffice ----
+        # ---- General LibreOffice conversions ----
         else:
             if f and convert_clicked:
                 with tempfile.TemporaryDirectory() as td:
