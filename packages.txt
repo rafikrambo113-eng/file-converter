@@ -1,4 +1,2 @@
 libreoffice
-libreoffice-writer
-libreoffice-calc
-libreoffice-impress
+libgl1
