@@ -103,22 +103,31 @@ st.markdown(
         border-radius: 14px;
     }
 
-    /* Buttons — neon gradient with glow */
+    /* Buttons — bold, clearly visible neon gradient */
     .stButton>button, .stDownloadButton>button {
         width: 100%;
         border-radius: 12px;
-        font-weight: 800;
-        padding: 0.65rem;
-        border: 1px solid rgba(0, 240, 255, 0.4);
-        background: linear-gradient(90deg, rgba(255,0,127,0.15), rgba(0,240,255,0.15));
-        color: #f5f4ff;
-        transition: all 0.25s ease;
+        font-weight: 900;
+        font-size: 1.05rem;
+        padding: 0.85rem;
+        border: 2px solid var(--neon-cyan);
+        background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
+        color: #050208;
+        box-shadow: 0 0 16px rgba(0, 240, 255, 0.5), 0 0 10px rgba(255, 0, 127, 0.4);
+        transition: all 0.2s ease;
+        letter-spacing: 0.3px;
+    }
+    .stButton>button p, .stDownloadButton>button p {
+        color: #050208 !important;
+        font-weight: 900 !important;
     }
     .stButton>button:hover, .stDownloadButton>button:hover {
-        border: 1px solid var(--neon-pink);
-        box-shadow: 0 0 18px rgba(255, 0, 127, 0.5), 0 0 18px rgba(0, 240, 255, 0.3);
-        color: #ffffff;
-        transform: translateY(-1px);
+        border: 2px solid #ffffff;
+        box-shadow: 0 0 26px rgba(255, 0, 127, 0.75), 0 0 26px rgba(0, 240, 255, 0.6);
+        transform: translateY(-2px) scale(1.01);
+    }
+    .stButton>button:active, .stDownloadButton>button:active {
+        transform: translateY(0) scale(0.99);
     }
 
     /* File uploader glow border */
@@ -130,6 +139,18 @@ st.markdown(
 
     footer {visibility: hidden;}
     #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Hide Streamlit Cloud toolbar (GitHub / Star / Fork / Edit / Share / Deploy) */
+    [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
+    [data-testid="stDecoration"] {display: none !important;}
+    [data-testid="stStatusWidget"] {visibility: hidden !important; display: none !important;}
+    .stDeployButton {display: none !important;}
+    #stDecoration {display: none !important;}
+    .viewerBadge_container__1QSob,
+    .viewerBadge_link__1S137,
+    .viewerBadge_text__1JaDK {display: none !important;}
+    a[href*="github.com"] {display: none !important;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -201,17 +222,56 @@ tab_docs, tab_images = st.tabs(["📄 تحويل المستندات", "🖼️ �
 # TAB 1 — DOCUMENTS
 # ============================================================================
 with tab_docs:
-    doc_options = {
-        "PDF ← Word (.docx)": "word2pdf",
-        "Word (.docx) ← PDF": "pdf2word",
-        "PDF ← Excel (.xlsx)": "excel2pdf",
-        "استخراج جداول من PDF إلى Excel": "pdf2excel",
-        "PDF ← PowerPoint (.pptx)": "ppt2pdf",
-        "صور ← PDF (كل صفحة صورة)": "pdf2images",
-        "PDF ← صور (دمج صور في ملف واحد)": "images2pdf_doc",
+    # صيغ المصدر والهدف — دروب داون منفصل لـ "من" و"إلى"
+    FROM_LABELS = {
+        "word": "📝 Word (.docx / .doc)",
+        "pdf": "📕 PDF",
+        "excel": "📊 Excel (.xlsx / .xls)",
+        "ppt": "📽️ PowerPoint (.pptx / .ppt)",
+        "images": "🖼️ صور (Images)",
     }
-    choice_label = st.selectbox("اختار نوع التحويل", list(doc_options.keys()))
-    choice = doc_options[choice_label]
+    TO_LABELS = {
+        "word": "📝 Word (.docx)",
+        "pdf": "📕 PDF",
+        "excel": "📊 Excel (.xlsx) — استخراج جداول",
+        "images": "🖼️ صور (PNG / JPEG)",
+    }
+    # الصيغ المسموح التحويل إليها بناءً على صيغة المصدر
+    TO_OPTIONS_MAP = {
+        "word": ["pdf"],
+        "pdf": ["word", "excel", "images"],
+        "excel": ["pdf"],
+        "ppt": ["pdf"],
+        "images": ["pdf"],
+    }
+    CONVERSION_MAP = {
+        ("word", "pdf"): "word2pdf",
+        ("pdf", "word"): "pdf2word",
+        ("excel", "pdf"): "excel2pdf",
+        ("pdf", "excel"): "pdf2excel",
+        ("ppt", "pdf"): "ppt2pdf",
+        ("pdf", "images"): "pdf2images",
+        ("images", "pdf"): "images2pdf_doc",
+    }
+
+    col_from, col_to = st.columns(2)
+    with col_from:
+        from_key = st.selectbox(
+            "🔽 حوّل من",
+            options=list(FROM_LABELS.keys()),
+            format_func=lambda k: FROM_LABELS[k],
+            key="from_fmt",
+        )
+    with col_to:
+        to_options = TO_OPTIONS_MAP[from_key]
+        to_key = st.selectbox(
+            "🔽 حوّل إلى",
+            options=to_options,
+            format_func=lambda k: TO_LABELS[k],
+            key="to_fmt",
+        )
+
+    choice = CONVERSION_MAP[(from_key, to_key)]
 
     # ---- Word -> PDF ----
     if choice == "word2pdf":
