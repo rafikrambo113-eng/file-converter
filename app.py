@@ -200,8 +200,18 @@ IMAGE_EXTS = ["png", "jpg", "jpeg", "webp", "bmp", "gif", "tiff", "tif", "ico"]
 MIME = {
     "pdf": "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "doc": "application/msword",
+    "odt": "application/vnd.oasis.opendocument.text",
+    "rtf": "application/rtf",
+    "txt": "text/plain",
+    "html": "text/html",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xls": "application/vnd.ms-excel",
+    "ods": "application/vnd.oasis.opendocument.spreadsheet",
+    "csv": "text/csv",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "ppt": "application/vnd.ms-powerpoint",
+    "odp": "application/vnd.oasis.opendocument.presentation",
     "png": "image/png",
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
@@ -222,44 +232,78 @@ tab_docs, tab_images = st.tabs(["📄 تحويل المستندات", "🖼️ �
 # TAB 1 — DOCUMENTS
 # ============================================================================
 with tab_docs:
-    # صيغ المصدر والهدف — دروب داون منفصل لـ "من" و"إلى"
-    FROM_LABELS = {
-        "word": "📝 Word (.docx / .doc)",
-        "pdf": "📕 PDF",
-        "excel": "📊 Excel (.xlsx / .xls)",
-        "ppt": "📽️ PowerPoint (.pptx / .ppt)",
-        "images": "🖼️ صور (Images)",
+    # كل صيغ المستندات المتاحة كمصدر
+    SRC_INFO = {
+        "docx":   {"label": "📝 Word (.docx)",                      "exts": ["docx"]},
+        "doc":    {"label": "📝 Word 97-2003 (.doc)",                "exts": ["doc"]},
+        "odt":    {"label": "📝 OpenDocument Text (.odt)",           "exts": ["odt"]},
+        "rtf":    {"label": "📝 مستند RTF (.rtf)",                   "exts": ["rtf"]},
+        "txt":    {"label": "📄 نص عادي (.txt)",                     "exts": ["txt"]},
+        "html":   {"label": "🌐 صفحة HTML (.html)",                  "exts": ["html", "htm"]},
+        "pdf":    {"label": "📕 PDF",                                "exts": ["pdf"]},
+        "xlsx":   {"label": "📊 Excel (.xlsx)",                      "exts": ["xlsx"]},
+        "xls":    {"label": "📊 Excel 97-2003 (.xls)",               "exts": ["xls"]},
+        "ods":    {"label": "📊 OpenDocument Spreadsheet (.ods)",   "exts": ["ods"]},
+        "csv":    {"label": "🧮 CSV",                                "exts": ["csv"]},
+        "pptx":   {"label": "📽️ PowerPoint (.pptx)",                 "exts": ["pptx"]},
+        "ppt":    {"label": "📽️ PowerPoint 97-2003 (.ppt)",          "exts": ["ppt"]},
+        "odp":    {"label": "📽️ OpenDocument Presentation (.odp)",  "exts": ["odp"]},
+        "images": {"label": "🖼️ صور (Images)",                      "exts": IMAGE_EXTS},
     }
-    TO_LABELS = {
-        "word": "📝 Word (.docx)",
+
+    # مسمّيات الصيغ لما تكون "هدف" التحويل
+    TARGET_LABELS = {
+        "docx": "📝 Word (.docx)",
+        "doc": "📝 Word 97-2003 (.doc)",
+        "odt": "📝 OpenDocument Text (.odt)",
+        "rtf": "📝 مستند RTF (.rtf)",
+        "txt": "📄 نص عادي (.txt)",
+        "html": "🌐 صفحة HTML (.html)",
         "pdf": "📕 PDF",
-        "excel": "📊 Excel (.xlsx) — استخراج جداول",
-        "images": "🖼️ صور (PNG / JPEG)",
+        "xlsx": "📊 Excel (.xlsx)",
+        "xls": "📊 Excel 97-2003 (.xls)",
+        "ods": "📊 OpenDocument Spreadsheet (.ods)",
+        "csv": "🧮 CSV",
+        "pptx": "📽️ PowerPoint (.pptx)",
+        "ppt": "📽️ PowerPoint 97-2003 (.ppt)",
+        "odp": "📽️ OpenDocument Presentation (.odp)",
+        "images": "🖼️ صور (صفحة لكل صورة)",
     }
+
     # الصيغ المسموح التحويل إليها بناءً على صيغة المصدر
     TO_OPTIONS_MAP = {
-        "word": ["pdf"],
-        "pdf": ["word", "excel", "images"],
-        "excel": ["pdf"],
-        "ppt": ["pdf"],
+        "docx":   ["pdf", "odt", "txt", "html", "rtf"],
+        "doc":    ["pdf", "docx", "odt", "txt"],
+        "odt":    ["pdf", "docx", "txt", "html"],
+        "rtf":    ["pdf", "docx", "txt"],
+        "txt":    ["pdf", "docx", "html"],
+        "html":   ["pdf", "docx", "txt"],
+        "pdf":    ["docx", "xlsx", "images", "txt"],
+        "xlsx":   ["pdf", "csv", "ods", "xls"],
+        "xls":    ["pdf", "xlsx", "csv"],
+        "ods":    ["pdf", "xlsx", "csv"],
+        "csv":    ["xlsx", "pdf", "ods"],
+        "pptx":   ["pdf", "odp", "ppt"],
+        "ppt":    ["pdf", "pptx"],
+        "odp":    ["pdf", "pptx"],
         "images": ["pdf"],
     }
-    CONVERSION_MAP = {
-        ("word", "pdf"): "word2pdf",
-        ("pdf", "word"): "pdf2word",
-        ("excel", "pdf"): "excel2pdf",
-        ("pdf", "excel"): "pdf2excel",
-        ("ppt", "pdf"): "ppt2pdf",
-        ("pdf", "images"): "pdf2images",
-        ("images", "pdf"): "images2pdf_doc",
-    }
+
+    def to_label(from_k, to_k):
+        if from_k == "pdf" and to_k == "xlsx":
+            return "📊 Excel (.xlsx) — استخراج جداول"
+        if from_k == "pdf" and to_k == "images":
+            return "🖼️ صور (صفحة لكل صورة)"
+        if from_k == "images" and to_k == "pdf":
+            return "📕 PDF (دمج الصور في ملف واحد)"
+        return TARGET_LABELS[to_k]
 
     col_from, col_to = st.columns(2)
     with col_from:
         from_key = st.selectbox(
             "🔽 حوّل من",
-            options=list(FROM_LABELS.keys()),
-            format_func=lambda k: FROM_LABELS[k],
+            options=list(SRC_INFO.keys()),
+            format_func=lambda k: SRC_INFO[k]["label"],
             key="from_fmt",
         )
     with col_to:
@@ -267,37 +311,58 @@ with tab_docs:
         to_key = st.selectbox(
             "🔽 حوّل إلى",
             options=to_options,
-            format_func=lambda k: TO_LABELS[k],
+            format_func=lambda k: to_label(from_key, k),
             key="to_fmt",
         )
 
-    choice = CONVERSION_MAP[(from_key, to_key)]
+    st.markdown("---")
 
-    # ---- Word -> PDF ----
-    if choice == "word2pdf":
-        f = st.file_uploader("ارفع ملف Word (.docx / .doc)", type=["docx", "doc"])
-        if f and st.button("حوّل إلى PDF"):
-            with tempfile.TemporaryDirectory() as td:
-                in_path = os.path.join(td, f.name)
-                with open(in_path, "wb") as out:
-                    out.write(f.getbuffer())
-                try:
-                    with st.spinner("جاري التحويل..."):
-                        out_path = soffice_convert(in_path, "pdf", td)
-                    with open(out_path, "rb") as r:
-                        data = r.read()
-                    st.success("تم التحويل بنجاح ✅")
-                    st.download_button(
-                        "⬇️ تحميل ملف PDF", data,
-                        file_name=Path(f.name).stem + ".pdf", mime=MIME["pdf"],
-                    )
-                except Exception as e:
-                    st.error(f"حصل خطأ أثناء التحويل: {e}")
+    # خيارات إضافية حسب نوع التحويل
+    dpi = 150
+    img_fmt = "PNG"
+    if from_key == "pdf" and to_key == "images":
+        dpi = st.slider("جودة الصور (DPI)", min_value=72, max_value=300, value=150, step=6)
+        img_fmt = st.selectbox("صيغة الصور", ["PNG", "JPEG"])
+
+    # رفع الملفات
+    if from_key == "images":
+        files_up = st.file_uploader(
+            "ارفع صورة أو أكتر (هتترتب زي ما ترفعها)",
+            type=SRC_INFO["images"]["exts"], accept_multiple_files=True, key="doc_img_up",
+        )
+        f = None
+    else:
+        f = st.file_uploader(
+            f"ارفع ملف {SRC_INFO[from_key]['label']}",
+            type=SRC_INFO[from_key]["exts"], key="doc_file_up",
+        )
+        files_up = None
+
+    convert_clicked = st.button("🚀 حوّل الملف")
+
+    # ---------------------------------------------------------------- handlers
+    # ---- Images -> PDF ----
+    if from_key == "images" and to_key == "pdf":
+        if files_up and convert_clicked:
+            try:
+                with st.spinner("جاري الدمج..."):
+                    images = [Image.open(uf).convert("RGB") for uf in files_up]
+                    buf = io.BytesIO()
+                    images[0].save(buf, format="PDF", save_all=True, append_images=images[1:])
+                    data = buf.getvalue()
+                st.success("تم الدمج بنجاح ✅")
+                st.download_button(
+                    "⬇️ تحميل ملف PDF", data,
+                    file_name="merged_images.pdf", mime=MIME["pdf"],
+                )
+            except Exception as e:
+                st.error(f"حصل خطأ أثناء الدمج: {e}")
+        elif convert_clicked:
+            st.warning("ارفع صورة واحدة على الأقل الأول.")
 
     # ---- PDF -> Word ----
-    elif choice == "pdf2word":
-        f = st.file_uploader("ارفع ملف PDF", type=["pdf"])
-        if f and st.button("حوّل إلى Word"):
+    elif from_key == "pdf" and to_key == "docx":
+        if f and convert_clicked:
             with tempfile.TemporaryDirectory() as td:
                 in_path = os.path.join(td, f.name)
                 with open(in_path, "wb") as out:
@@ -317,32 +382,12 @@ with tab_docs:
                     )
                 except Exception as e:
                     st.error(f"حصل خطأ أثناء التحويل: {e}")
-
-    # ---- Excel -> PDF ----
-    elif choice == "excel2pdf":
-        f = st.file_uploader("ارفع ملف Excel (.xlsx / .xls)", type=["xlsx", "xls"])
-        if f and st.button("حوّل إلى PDF"):
-            with tempfile.TemporaryDirectory() as td:
-                in_path = os.path.join(td, f.name)
-                with open(in_path, "wb") as out:
-                    out.write(f.getbuffer())
-                try:
-                    with st.spinner("جاري التحويل..."):
-                        out_path = soffice_convert(in_path, "pdf", td)
-                    with open(out_path, "rb") as r:
-                        data = r.read()
-                    st.success("تم التحويل بنجاح ✅")
-                    st.download_button(
-                        "⬇️ تحميل ملف PDF", data,
-                        file_name=Path(f.name).stem + ".pdf", mime=MIME["pdf"],
-                    )
-                except Exception as e:
-                    st.error(f"حصل خطأ أثناء التحويل: {e}")
+        elif convert_clicked:
+            st.warning("ارفع ملف PDF الأول.")
 
     # ---- PDF -> Excel (extract tables) ----
-    elif choice == "pdf2excel":
-        f = st.file_uploader("ارفع ملف PDF فيه جداول", type=["pdf"])
-        if f and st.button("استخرج الجداول إلى Excel"):
+    elif from_key == "pdf" and to_key == "xlsx":
+        if f and convert_clicked:
             with tempfile.TemporaryDirectory() as td:
                 in_path = os.path.join(td, f.name)
                 with open(in_path, "wb") as out:
@@ -375,34 +420,12 @@ with tab_docs:
                         )
                 except Exception as e:
                     st.error(f"حصل خطأ أثناء التحويل: {e}")
-
-    # ---- PowerPoint -> PDF ----
-    elif choice == "ppt2pdf":
-        f = st.file_uploader("ارفع ملف PowerPoint (.pptx / .ppt)", type=["pptx", "ppt"])
-        if f and st.button("حوّل إلى PDF"):
-            with tempfile.TemporaryDirectory() as td:
-                in_path = os.path.join(td, f.name)
-                with open(in_path, "wb") as out:
-                    out.write(f.getbuffer())
-                try:
-                    with st.spinner("جاري التحويل..."):
-                        out_path = soffice_convert(in_path, "pdf", td)
-                    with open(out_path, "rb") as r:
-                        data = r.read()
-                    st.success("تم التحويل بنجاح ✅")
-                    st.download_button(
-                        "⬇️ تحميل ملف PDF", data,
-                        file_name=Path(f.name).stem + ".pdf", mime=MIME["pdf"],
-                    )
-                except Exception as e:
-                    st.error(f"حصل خطأ أثناء التحويل: {e}")
+        elif convert_clicked:
+            st.warning("ارفع ملف PDF الأول.")
 
     # ---- PDF -> Images ----
-    elif choice == "pdf2images":
-        f = st.file_uploader("ارفع ملف PDF", type=["pdf"])
-        dpi = st.slider("جودة الصور (DPI)", min_value=72, max_value=300, value=150, step=6)
-        img_fmt = st.selectbox("صيغة الصور", ["PNG", "JPEG"])
-        if f and st.button("حوّل الصفحات لصور"):
+    elif from_key == "pdf" and to_key == "images":
+        if f and convert_clicked:
             with tempfile.TemporaryDirectory() as td:
                 in_path = os.path.join(td, f.name)
                 with open(in_path, "wb") as out:
@@ -430,30 +453,55 @@ with tab_docs:
                         )
                 except Exception as e:
                     st.error(f"حصل خطأ أثناء التحويل: {e}")
+        elif convert_clicked:
+            st.warning("ارفع ملف PDF الأول.")
 
-    # ---- Images -> PDF ----
-    elif choice == "images2pdf_doc":
-        files_up = st.file_uploader(
-            "ارفع صورة أو أكتر (هتترتب زي ما ترفعها)",
-            type=IMAGE_EXTS, accept_multiple_files=True,
-        )
-        if files_up and st.button("ادمج الصور في PDF"):
-            try:
-                with st.spinner("جاري الدمج..."):
-                    images = []
-                    for uf in files_up:
-                        img = Image.open(uf).convert("RGB")
-                        images.append(img)
-                    buf = io.BytesIO()
-                    images[0].save(buf, format="PDF", save_all=True, append_images=images[1:])
-                    data = buf.getvalue()
-                st.success("تم الدمج بنجاح ✅")
-                st.download_button(
-                    "⬇️ تحميل ملف PDF", data,
-                    file_name="merged_images.pdf", mime=MIME["pdf"],
-                )
-            except Exception as e:
-                st.error(f"حصل خطأ أثناء الدمج: {e}")
+    # ---- PDF -> Text ----
+    elif from_key == "pdf" and to_key == "txt":
+        if f and convert_clicked:
+            with tempfile.TemporaryDirectory() as td:
+                in_path = os.path.join(td, f.name)
+                with open(in_path, "wb") as out:
+                    out.write(f.getbuffer())
+                try:
+                    with st.spinner("جاري استخراج النص..."):
+                        doc = fitz.open(in_path)
+                        text = "\n\n".join(page.get_text() for page in doc)
+                        doc.close()
+                    data = text.encode("utf-8")
+                    st.success("تم الاستخراج بنجاح ✅")
+                    st.download_button(
+                        "⬇️ تحميل ملف نصي", data,
+                        file_name=Path(f.name).stem + ".txt", mime=MIME["txt"],
+                    )
+                except Exception as e:
+                    st.error(f"حصل خطأ أثناء الاستخراج: {e}")
+        elif convert_clicked:
+            st.warning("ارفع ملف PDF الأول.")
+
+    # ---- كل التحويلات العامة الأخرى (Word/ODT/RTF/TXT/HTML/Excel/ODS/CSV/PowerPoint/ODP <-> PDF وبينهم بعض) عن طريق LibreOffice ----
+    else:
+        if f and convert_clicked:
+            with tempfile.TemporaryDirectory() as td:
+                in_path = os.path.join(td, f.name)
+                with open(in_path, "wb") as out:
+                    out.write(f.getbuffer())
+                try:
+                    with st.spinner("جاري التحويل..."):
+                        out_path = soffice_convert(in_path, to_key, td)
+                    with open(out_path, "rb") as r:
+                        data = r.read()
+                    out_name = Path(f.name).stem + "." + to_key
+                    st.success("تم التحويل بنجاح ✅")
+                    st.download_button(
+                        "⬇️ تحميل الملف", data,
+                        file_name=out_name, mime=MIME.get(to_key, "application/octet-stream"),
+                    )
+                except Exception as e:
+                    st.error(f"حصل خطأ أثناء التحويل: {e}")
+        elif convert_clicked:
+            st.warning("ارفع الملف الأول.")
+
 
 # ============================================================================
 # TAB 2 — IMAGES
