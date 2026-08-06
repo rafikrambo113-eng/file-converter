@@ -506,19 +506,22 @@ with tab_pdf_tools:
     ]
 
     merge_uploads = st.file_uploader(
-        "اختار الملفات أو اسحبها هنا (تقدر تغيّر الترتيب بعد الرفع بأزرار ⬆️ ⬇️)",
+        "اختار الملفات أو اسحبها هنا (رتّبها بـ ⬆️ ⬇️، أو احذف أي ملف بزرار 🗑️)",
         type=MERGE_UPLOAD_TYPES, accept_multiple_files=True, key="merge_uploader",
     )
 
     if "merge_order" not in st.session_state:
         st.session_state.merge_order = []
+    if "merge_excluded" not in st.session_state:
+        st.session_state.merge_excluded = set()
 
     uploaded_map = {uf.name: uf for uf in (merge_uploads or [])}
-    # حافظ على ترتيب المستخدم للملفات الموجودة، وضيف أي ملف جديد في الآخر،
-    # واشطب أي ملف اتشال من الرفع (زرار الحذف الأصلي بتاع Streamlit)
+    # اشطب أي ملف اتشال من الرفع (زرار الحذف الأصلي بتاع Streamlit) من قايمة الاستبعاد
+    st.session_state.merge_excluded &= set(uploaded_map.keys())
+    # حافظ على ترتيب المستخدم للملفات الموجودة وغير المستبعدة، وضيف أي ملف جديد في الآخر
     st.session_state.merge_order = (
-        [n for n in st.session_state.merge_order if n in uploaded_map]
-        + [n for n in uploaded_map if n not in st.session_state.merge_order]
+        [n for n in st.session_state.merge_order if n in uploaded_map and n not in st.session_state.merge_excluded]
+        + [n for n in uploaded_map if n not in st.session_state.merge_order and n not in st.session_state.merge_excluded]
     )
     ordered_files = [uploaded_map[n] for n in st.session_state.merge_order]
 
@@ -547,7 +550,7 @@ with tab_pdf_tools:
         st.markdown("##### 🗂️ ترتيب الملفات")
         for i, uf in enumerate(ordered_files):
             with st.container(border=True):
-                cimg, cinfo, cup, cdown = st.columns([1, 4, 1, 1])
+                cimg, cinfo, cup, cdown, cdel = st.columns([1, 4, 1, 1, 1])
                 n_pages = None
                 try:
                     pdf_bytes = _get_pdf_bytes(uf)
@@ -572,6 +575,12 @@ with tab_pdf_tools:
                     if st.button("⬇️", key=f"mrg_down_{uf.name}", disabled=(i == len(ordered_files) - 1)):
                         order = st.session_state.merge_order
                         order[i + 1], order[i] = order[i], order[i + 1]
+                        st.rerun()
+                with cdel:
+                    if st.button("🗑️", key=f"mrg_del_{uf.name}", help="احذف الملف ده من قايمة الدمج"):
+                        st.session_state.merge_excluded.add(uf.name)
+                        if uf.name in st.session_state.merge_order:
+                            st.session_state.merge_order.remove(uf.name)
                         st.rerun()
 
                 if pro_mode and n_pages:
