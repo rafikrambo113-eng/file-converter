@@ -143,10 +143,18 @@ st.markdown(
 FORMATS = {
     "PDF": "pdf",
     "Word (DOCX)": "docx",
+    "Word 97-2003 (DOC)": "doc",
+    "OpenDocument Text (ODT)": "odt",
+    "مستند RTF": "rtf",
+    "نص عادي (TXT)": "txt",
+    "صفحة HTML": "html",
     "Excel (XLSX)": "xlsx",
-    "PowerPoint (PPTX)": "pptx",
-    "نص (TXT)": "txt",
+    "Excel 97-2003 (XLS)": "xls",
+    "OpenDocument Spreadsheet (ODS)": "ods",
     "جدول (CSV)": "csv",
+    "PowerPoint (PPTX)": "pptx",
+    "PowerPoint 97-2003 (PPT)": "ppt",
+    "OpenDocument Presentation (ODP)": "odp",
     "PNG": "png",
     "JPG / JPEG": "jpg",
     "WEBP": "webp",
@@ -157,15 +165,23 @@ FORMATS = {
 }
 EXT_TO_NAME = {v: k for k, v in FORMATS.items()}
 IMAGE_EXT_SET = {"png", "jpg", "webp", "bmp", "gif", "tiff", "ico"}
-UPLOAD_TYPE_ALIASES = {"jpg": ["jpg", "jpeg"], "tiff": ["tiff", "tif"]}
+UPLOAD_TYPE_ALIASES = {"jpg": ["jpg", "jpeg"], "tiff": ["tiff", "tif"], "html": ["html", "htm"]}
 
 TARGETS = {
-    "pdf": ["docx", "xlsx", "txt", "png", "jpg"],
-    "docx": ["pdf", "txt"],
-    "xlsx": ["pdf", "csv"],
-    "pptx": ["pdf"],
-    "txt": ["pdf", "docx"],
-    "csv": ["xlsx", "pdf"],
+    "pdf":  ["docx", "xlsx", "txt", "png", "jpg", "odt", "html"],
+    "docx": ["pdf", "txt", "odt", "html", "rtf"],
+    "doc":  ["pdf", "docx", "odt", "txt"],
+    "odt":  ["pdf", "docx", "txt", "html"],
+    "rtf":  ["pdf", "docx", "txt"],
+    "txt":  ["pdf", "docx", "html"],
+    "html": ["pdf", "docx", "txt"],
+    "xlsx": ["pdf", "csv", "ods", "xls"],
+    "xls":  ["pdf", "xlsx", "csv"],
+    "ods":  ["pdf", "xlsx", "csv"],
+    "csv":  ["xlsx", "pdf", "ods"],
+    "pptx": ["pdf", "odp", "ppt"],
+    "ppt":  ["pdf", "pptx"],
+    "odp":  ["pdf", "pptx"],
 }
 for _ext in IMAGE_EXT_SET:
     TARGETS[_ext] = ["pdf"] + sorted(e for e in IMAGE_EXT_SET if e != _ext)
@@ -173,10 +189,18 @@ for _ext in IMAGE_EXT_SET:
 MIME = {
     "pdf": "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "doc": "application/msword",
+    "odt": "application/vnd.oasis.opendocument.text",
+    "rtf": "application/rtf",
     "txt": "text/plain",
+    "html": "text/html",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xls": "application/vnd.ms-excel",
+    "ods": "application/vnd.oasis.opendocument.spreadsheet",
     "csv": "text/csv",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "ppt": "application/vnd.ms-powerpoint",
+    "odp": "application/vnd.oasis.opendocument.presentation",
     "png": "image/png",
     "jpg": "image/jpeg",
     "webp": "image/webp",
