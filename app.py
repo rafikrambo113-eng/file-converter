@@ -496,35 +496,149 @@ with tab_convert:
 # TAB 2 — أدوات PDF: دمج ملفات + حذف صفحات، مجمّعين في تبويب واحد
 # ============================================================================
 with tab_pdf_tools:
-    st.markdown("#### 🔗 دمج أكتر من ملف PDF في ملف واحد")
-    merge_files = st.file_uploader(
-        "ارفع ملفات PDF (هتتدمج بنفس الترتيب اللي رفعتها بيه)",
-        type=["pdf"], accept_multiple_files=True, key="merge_uploader",
+    st.markdown("#### 🔗 دمج ملفات في PDF واحد")
+    st.caption("تقدر تدمج PDF مع Word وPowerPoint والصور مع بعض — أي صيغة غير PDF هتتحول تلقائيًا.")
+
+    MERGE_UPLOAD_TYPES = [
+        "pdf", "docx", "doc", "odt", "rtf", "txt", "html", "htm",
+        "pptx", "ppt", "odp", "xlsx", "xls", "csv",
+        "png", "jpg", "jpeg", "webp", "bmp", "gif", "tiff", "tif",
+    ]
+
+    merge_uploads = st.file_uploader(
+        "اختار الملفات أو اسحبها هنا (تقدر تغيّر الترتيب بعد الرفع بأزرار ⬆️ ⬇️)",
+        type=MERGE_UPLOAD_TYPES, accept_multiple_files=True, key="merge_uploader",
     )
 
-    # ---- معاينة كل الملفات المرفوعة للدمج، بتكبير/تصغير ----
-    if merge_files:
-        st.markdown("##### 👁️ معاينة الملفات قبل الدمج")
-        merge_input_map = {uf.name: uf.getvalue() for uf in merge_files}
-        render_multi_preview("pdf", merge_input_map, key_prefix="merge_input")
+    if "merge_order" not in st.session_state:
+        st.session_state.merge_order = []
 
-    if merge_files and st.button("🚀 ادمج الملفات"):
-        try:
-            with st.spinner("جاري الدمج..."):
-                out_doc = fitz.open()
-                for uf in merge_files:
-                    src = fitz.open(stream=uf.getvalue(), filetype="pdf")
-                    out_doc.insert_pdf(src)
-                    src.close()
-                buf = io.BytesIO()
-                out_doc.save(buf)
-                out_doc.close()
-                merged_data = buf.getvalue()
-            st.session_state["_merge_result"] = merged_data
-            st.success(f"تم دمج {len(merge_files)} ملفات بنجاح ✅")
-        except Exception as e:
-            st.session_state["_merge_result"] = None
-            st.error(f"حصل خطأ أثناء الدمج: {e}")
+    uploaded_map = {uf.name: uf for uf in (merge_uploads or [])}
+    # حافظ على ترتيب المستخدم للملفات الموجودة، وضيف أي ملف جديد في الآخر،
+    # واشطب أي ملف اتشال من الرفع (زرار الحذف الأصلي بتاع Streamlit)
+    st.session_state.merge_order = (
+        [n for n in st.session_state.merge_order if n in uploaded_map]
+        + [n for n in uploaded_map if n not in st.session_state.merge_order]
+    )
+    ordered_files = [uploaded_map[n] for n in st.session_state.merge_order]
+
+    def _detect_ext(name: str) -> str:
+        suf = Path(name).suffix.lower().lstrip(".")
+        return {"jpeg": "jpg", "htm": "html", "tif": "tiff"}.get(suf, suf)
+
+    def _file_key(uf) -> str:
+        return f"{uf.name}_{getattr(uf, 'size', 0)}"
+
+    def _get_pdf_bytes(uf) -> bytes:
+        ext = _detect_ext(uf.name)
+        if ext == "pdf":
+            return uf.getvalue()
+        cache_key = f"_mrgpdf_{_file_key(uf)}"
+        if cache_key not in st.session_state:
+            result = do_convert(ext, "pdf", [uf])
+            st.session_state[cache_key] = list(result.values())[0]
+        return st.session_state[cache_key]
+
+    if ordered_files:
+        pro_mode = st.checkbox(
+            "🔧 الوضع الاحترافي — اختيار صفحات معينة من كل ملف (زي PDF24)", key="merge_pro_mode"
+        )
+
+        st.markdown("##### 🗂️ ترتيب الملفات")
+        for i, uf in enumerate(ordered_files):
+            with st.container(border=True):
+                cimg, cinfo, cup, cdown = st.columns([1, 4, 1, 1])
+                n_pages = None
+                try:
+                    pdf_bytes = _get_pdf_bytes(uf)
+                    thumb_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                    n_pages = len(thumb_doc)
+                    pix = thumb_doc[0].get_pixmap(dpi=55)
+                    with cimg:
+                        st.image(pix.tobytes("png"))
+                    thumb_doc.close()
+                except Exception:
+                    with cimg:
+                        st.caption("⚠️")
+                with cinfo:
+                    st.markdown(f"**{i + 1}. {uf.name}**")
+                    st.caption(f"{n_pages} صفحة" if n_pages else "تعذّرت معالجة الملف")
+                with cup:
+                    if st.button("⬆️", key=f"mrg_up_{uf.name}", disabled=(i == 0)):
+                        order = st.session_state.merge_order
+                        order[i - 1], order[i] = order[i], order[i - 1]
+                        st.rerun()
+                with cdown:
+                    if st.button("⬇️", key=f"mrg_down_{uf.name}", disabled=(i == len(ordered_files) - 1)):
+                        order = st.session_state.merge_order
+                        order[i + 1], order[i] = order[i], order[i + 1]
+                        st.rerun()
+
+                if pro_mode and n_pages:
+                    sel_key = f"_mrgpages_{_file_key(uf)}"
+                    default_pages = list(range(1, n_pages + 1))
+                    st.multiselect(
+                        f"الصفحات المطلوبة من الملف ده (بالترتيب اللي هتتضم بيه)",
+                        options=default_pages,
+                        default=st.session_state.get(sel_key, default_pages),
+                        key=sel_key,
+                    )
+
+        st.markdown("##### ⚙️ خيارات الدمج")
+        c1, c2 = st.columns(2)
+        with c1:
+            blank_mode = st.selectbox(
+                "إدراج صفحات فارغة بين الملفات",
+                ["بدون", "دائمًا", "عند عدد صفحات فردي"],
+                key="merge_blank_mode",
+            )
+        with c2:
+            add_bookmarks = st.checkbox("📑 إنشاء علامات مرجعية (Bookmarks) باسم كل ملف", key="merge_bookmarks")
+
+        if st.button("🚀 ادمج الملفات", key="merge_go"):
+            try:
+                with st.spinner("جاري الدمج..."):
+                    out_doc = fitz.open()
+                    toc = []
+                    current_page = 0
+                    for uf in ordered_files:
+                        pdf_bytes = _get_pdf_bytes(uf)
+                        src = fitz.open(stream=pdf_bytes, filetype="pdf")
+                        if pro_mode:
+                            sel_key = f"_mrgpages_{_file_key(uf)}"
+                            sel_pages = st.session_state.get(sel_key, list(range(1, len(src) + 1)))
+                            if not sel_pages:
+                                src.close()
+                                continue
+                            src.select([p - 1 for p in sel_pages])
+                        n_added = len(src)
+                        if add_bookmarks:
+                            toc.append([1, uf.name, current_page + 1])
+                        out_doc.insert_pdf(src)
+                        current_page += n_added
+                        src.close()
+
+                        insert_blank = (
+                            blank_mode == "دائمًا"
+                            or (blank_mode == "عند عدد صفحات فردي" and n_added % 2 == 1)
+                        )
+                        if insert_blank and uf is not ordered_files[-1] and len(out_doc) > 0:
+                            last_rect = out_doc[-1].rect
+                            out_doc.new_page(width=last_rect.width, height=last_rect.height)
+                            current_page += 1
+
+                    if add_bookmarks and toc:
+                        out_doc.set_toc(toc)
+
+                    buf = io.BytesIO()
+                    out_doc.save(buf)
+                    out_doc.close()
+                    merged_data = buf.getvalue()
+                st.session_state["_merge_result"] = merged_data
+                st.success(f"تم دمج {len(ordered_files)} ملفات بنجاح ✅")
+            except Exception as e:
+                st.session_state["_merge_result"] = None
+                st.error(f"حصل خطأ أثناء الدمج: {e}")
 
     if st.session_state.get("_merge_result"):
         st.markdown("##### 👁️ معاينة الملف المدموج")
@@ -533,6 +647,7 @@ with tab_pdf_tools:
             "⬇️ تحميل PDF المدموج", st.session_state["_merge_result"],
             file_name="merged.pdf", mime=MIME["pdf"],
         )
+
 
     st.markdown("---")
     st.markdown("#### 🗑️ حذف صفحات من PDF")
