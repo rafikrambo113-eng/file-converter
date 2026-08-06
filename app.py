@@ -195,6 +195,78 @@ def make_zip(files: dict) -> bytes:
     return buf.read()
 
 
+def pdf_to_styled_excel(pdf_path: str, out_path: str) -> bool:
+    """Extract tables with borders, bold header, RTL, and the page's embedded
+    logo/banner image — so the result visually matches the source PDF instead
+    of being a bare data dump. Returns True if at least one table was found."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.utils import get_column_letter
+    from PIL import Image as PILImage
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    thin = Side(style="thin", color="999999")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    found_any = False
+
+    with pdfplumber.open(pdf_path) as pdf, fitz.open(pdf_path) as fdoc:
+        for pi, page in enumerate(pdf.pages, start=1):
+            tables = page.find_tables()
+            if not tables:
+                continue
+            fpage = fdoc[pi - 1]
+
+            for ti, table in enumerate(tables, start=1):
+                if not table.rows:
+                    continue
+                found_any = True
+                ws = wb.create_sheet(f"page{pi}_t{ti}"[:31])
+                ws.sheet_view.rightToLeft = True
+
+                row_offset = 0
+                if ti == 1:
+                    imgs = fpage.get_images(full=True)
+                    if imgs:
+                        try:
+                            base = fdoc.extract_image(imgs[0][0])
+                            pil_img = PILImage.open(io.BytesIO(base["image"]))
+                            max_w = 700
+                            if pil_img.width > max_w:
+                                ratio = max_w / pil_img.width
+                                pil_img = pil_img.resize((max_w, int(pil_img.height * ratio)))
+                            buf = io.BytesIO()
+                            pil_img.convert("RGB").save(buf, format="PNG")
+                            buf.seek(0)
+                            ws.add_image(XLImage(buf), "A1")
+                            row_offset = max(3, int(pil_img.height / 18) + 1)
+                        except Exception:
+                            row_offset = 0
+
+                n_cols = len(table.rows[0].cells)
+                for ci in range(n_cols):
+                    ws.column_dimensions[get_column_letter(ci + 1)].width = 20
+
+                for ri, row in enumerate(table.rows):
+                    for ci, bbox in enumerate(row.cells):
+                        if bbox is None:
+                            continue
+                        x0, top, x1, bottom = bbox
+                        txt = fpage.get_text("text", clip=fitz.Rect(x0, top, x1, bottom)).strip()
+                        txt = " ".join(txt.split("\n"))
+                        cell = ws.cell(row=row_offset + ri + 1, column=ci + 1, value=txt)
+                        cell.border = border
+                        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                        if ri == 0:
+                            cell.font = Font(bold=True)
+                    ws.row_dimensions[row_offset + ri + 1].height = 22
+
+    if found_any:
+        wb.save(out_path)
+    return found_any
+
+
 def read_csv_smart(path: str) -> pd.DataFrame:
     for enc in ("utf-8-sig", "utf-8", "cp1256", "latin1"):
         try:
@@ -226,15 +298,7 @@ def do_convert(from_ext: str, to_ext: str, files) -> dict:
                 return {stem + ".docx": open(out_path, "rb").read()}
             if to_ext == "xlsx":
                 out_path = os.path.join(td, stem + ".xlsx")
-                found = False
-                with pdfplumber.open(in_path) as pdf, pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-                    for i, page in enumerate(pdf.pages, start=1):
-                        for j, table in enumerate(page.extract_tables(), start=1):
-                            if not table:
-                                continue
-                            df = pd.DataFrame(table[1:], columns=table[0])
-                            df.to_excel(writer, sheet_name=f"page{i}_t{j}"[:31], index=False)
-                            found = True
+                found = pdf_to_styled_excel(in_path, out_path)
                 if not found:
                     raise RuntimeError("معرفش ألاقي جداول واضحة في الـ PDF ده.")
                 return {stem + ".xlsx": open(out_path, "rb").read()}
