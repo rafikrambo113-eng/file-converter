@@ -111,6 +111,21 @@ st.markdown(
 
     footer {visibility: hidden;}
     #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Hide Streamlit Cloud toolbar (GitHub / Star / Fork / Edit / Share / Deploy / Manage app) */
+    [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
+    [data-testid="stToolbarActions"] {visibility: hidden !important; display: none !important;}
+    [data-testid="stDecoration"] {display: none !important;}
+    [data-testid="stStatusWidget"] {visibility: hidden !important; display: none !important;}
+    [data-testid="manage-app-button"] {display: none !important;}
+    .stAppDeployButton {display: none !important;}
+    .stAppToolbar {display: none !important;}
+    #stDecoration {display: none !important;}
+    [class^="viewerBadge"], [class*="viewerBadge"] {display: none !important;}
+    a[href*="github.com"] {display: none !important;}
+    a[href*="share.streamlit.io"] {display: none !important;}
+    iframe[title="streamlit_menu_iframe"] {display: none !important;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -195,76 +210,43 @@ def make_zip(files: dict) -> bytes:
     return buf.read()
 
 
-def pdf_to_styled_excel(pdf_path: str, out_path: str) -> bool:
-    """Extract tables with borders, bold header, RTL, and the page's embedded
-    logo/banner image — so the result visually matches the source PDF instead
-    of being a bare data dump. Returns True if at least one table was found."""
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, Border, Side
-    from openpyxl.drawing.image import Image as XLImage
-    from openpyxl.utils import get_column_letter
-    from PIL import Image as PILImage
+def render_preview(ext: str, data: bytes):
+    """Shows an in-app preview of the converted result before download."""
+    try:
+        if ext in IMAGE_EXT_SET:
+            st.image(data, use_container_width=True)
+        elif ext == "pdf":
+            doc = fitz.open(stream=data, filetype="pdf")
+            pix = doc[0].get_pixmap(dpi=120)
+            st.image(pix.tobytes("png"), use_container_width=True, caption=f"صفحة 1 من {len(doc)}")
+            doc.close()
+        elif ext == "txt":
+            text = data.decode("utf-8", errors="replace")
+            st.text_area("معاينة النص", text[:4000], height=220)
+        elif ext == "csv":
+            df = pd.read_csv(io.BytesIO(data))
+            st.dataframe(df.head(30), use_container_width=True)
+        elif ext == "xlsx":
+            df = pd.read_excel(io.BytesIO(data), engine="openpyxl")
+            st.dataframe(df.head(30), use_container_width=True)
+        else:
+            st.caption("مفيش معاينة متاحة لصيغة الملف ده جوّه المتصفح — نزّل الملف عشان تفتحه.")
+    except Exception:
+        st.caption("معرفتش أجهّز معاينة للملف ده، بس التحويل تم بنجاح وممكن تنزّله عادي.")
 
-    wb = Workbook()
-    wb.remove(wb.active)
-    thin = Side(style="thin", color="999999")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    found_any = False
 
-    with pdfplumber.open(pdf_path) as pdf, fitz.open(pdf_path) as fdoc:
-        for pi, page in enumerate(pdf.pages, start=1):
-            tables = page.find_tables()
-            if not tables:
-                continue
-            fpage = fdoc[pi - 1]
-
-            for ti, table in enumerate(tables, start=1):
-                if not table.rows:
-                    continue
-                found_any = True
-                ws = wb.create_sheet(f"page{pi}_t{ti}"[:31])
-                ws.sheet_view.rightToLeft = True
-
-                row_offset = 0
-                if ti == 1:
-                    imgs = fpage.get_images(full=True)
-                    if imgs:
-                        try:
-                            base = fdoc.extract_image(imgs[0][0])
-                            pil_img = PILImage.open(io.BytesIO(base["image"]))
-                            max_w = 700
-                            if pil_img.width > max_w:
-                                ratio = max_w / pil_img.width
-                                pil_img = pil_img.resize((max_w, int(pil_img.height * ratio)))
-                            buf = io.BytesIO()
-                            pil_img.convert("RGB").save(buf, format="PNG")
-                            buf.seek(0)
-                            ws.add_image(XLImage(buf), "A1")
-                            row_offset = max(3, int(pil_img.height / 18) + 1)
-                        except Exception:
-                            row_offset = 0
-
-                n_cols = len(table.rows[0].cells)
-                for ci in range(n_cols):
-                    ws.column_dimensions[get_column_letter(ci + 1)].width = 20
-
-                for ri, row in enumerate(table.rows):
-                    for ci, bbox in enumerate(row.cells):
-                        if bbox is None:
-                            continue
-                        x0, top, x1, bottom = bbox
-                        txt = fpage.get_text("text", clip=fitz.Rect(x0, top, x1, bottom)).strip()
-                        txt = " ".join(txt.split("\n"))
-                        cell = ws.cell(row=row_offset + ri + 1, column=ci + 1, value=txt)
-                        cell.border = border
-                        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-                        if ri == 0:
-                            cell.font = Font(bold=True)
-                    ws.row_dimensions[row_offset + ri + 1].height = 22
-
-    if found_any:
-        wb.save(out_path)
-    return found_any
+def render_multi_preview(ext: str, files: dict, limit: int = 6):
+    """Preview grid for multi-file results (e.g. PDF -> images)."""
+    items = list(files.items())[:limit]
+    if ext in IMAGE_EXT_SET:
+        cols = st.columns(3)
+        for i, (name, data) in enumerate(items):
+            with cols[i % 3]:
+                st.image(data, use_container_width=True, caption=name)
+    else:
+        st.caption("مفيش معاينة متاحة لصيغة الملفات دي — نزّل الملف (ZIP) عشان تفتحها.")
+    if len(files) > limit:
+        st.caption(f"...وكمان {len(files) - limit} ملف تاني جوّه الـ ZIP.")
 
 
 def read_csv_smart(path: str) -> pd.DataFrame:
@@ -298,7 +280,15 @@ def do_convert(from_ext: str, to_ext: str, files) -> dict:
                 return {stem + ".docx": open(out_path, "rb").read()}
             if to_ext == "xlsx":
                 out_path = os.path.join(td, stem + ".xlsx")
-                found = pdf_to_styled_excel(in_path, out_path)
+                found = False
+                with pdfplumber.open(in_path) as pdf, pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+                    for i, page in enumerate(pdf.pages, start=1):
+                        for j, table in enumerate(page.extract_tables(), start=1):
+                            if not table:
+                                continue
+                            df = pd.DataFrame(table[1:], columns=table[0])
+                            df.to_excel(writer, sheet_name=f"page{i}_t{j}"[:31], index=False)
+                            found = True
                 if not found:
                     raise RuntimeError("معرفش ألاقي جداول واضحة في الـ PDF ده.")
                 return {stem + ".xlsx": open(out_path, "rb").read()}
@@ -362,54 +352,168 @@ def do_convert(from_ext: str, to_ext: str, files) -> dict:
 
 
 # ----------------------------------------------------------------------------
-# UI — From / Arrow / To
+# UI — Tabs: التحويل / معاينة PDF / دمج وحذف صفحات PDF
 # ----------------------------------------------------------------------------
-col_from, col_arrow, col_to = st.columns([5, 1, 5])
+tab_convert, tab_review, tab_pages = st.tabs([
+    "🔄 تحويل الصيغ", "📖 معاينة PDF", "🧩 دمج وحذف صفحات PDF",
+])
 
-with col_from:
-    from_name = st.selectbox("حوّل من:", list(FORMATS.keys()), key="from_fmt")
-from_ext = FORMATS[from_name]
+# ============================================================================
+# TAB 1 — التحويل بين الصيغ (من / إلى)
+# ============================================================================
+with tab_convert:
+    col_from, col_arrow, col_to = st.columns([5, 1, 5])
 
-valid_to_exts = TARGETS.get(from_ext, [])
-valid_to_names = [EXT_TO_NAME[e] for e in valid_to_exts]
+    with col_from:
+        from_name = st.selectbox("حوّل من:", list(FORMATS.keys()), key="from_fmt")
+    from_ext = FORMATS[from_name]
 
-with col_arrow:
-    st.markdown('<div class="conv-arrow">⬅</div>', unsafe_allow_html=True)
+    valid_to_exts = TARGETS.get(from_ext, [])
+    valid_to_names = [EXT_TO_NAME[e] for e in valid_to_exts]
 
-with col_to:
-    if valid_to_names:
-        to_name = st.selectbox("حوّل إلى:", valid_to_names, key=f"to_fmt_{from_ext}")
-        to_ext = FORMATS[to_name]
-    else:
-        st.selectbox("حوّل إلى:", ["لا يوجد تحويل متاح"], disabled=True)
-        to_ext = None
+    with col_arrow:
+        st.markdown('<div class="conv-arrow">⬅</div>', unsafe_allow_html=True)
 
-st.markdown("")
+    with col_to:
+        if valid_to_names:
+            to_name = st.selectbox("حوّل إلى:", valid_to_names, key=f"to_fmt_{from_ext}")
+            to_ext = FORMATS[to_name]
+        else:
+            st.selectbox("حوّل إلى:", ["لا يوجد تحويل متاح"], disabled=True)
+            to_ext = None
 
-allow_multi = from_ext in IMAGE_EXT_SET
-upload_types = UPLOAD_TYPE_ALIASES.get(from_ext, [from_ext])
+    st.markdown("")
 
-uploaded = st.file_uploader(
-    f"ارفع ملف {from_name}" + (" (تقدر ترفع أكتر من ملف)" if allow_multi else ""),
-    type=upload_types,
-    accept_multiple_files=allow_multi,
-    key=f"uploader_{from_ext}_{to_ext}",
-)
-files = uploaded if isinstance(uploaded, list) else ([uploaded] if uploaded else [])
+    allow_multi = from_ext in IMAGE_EXT_SET
+    upload_types = UPLOAD_TYPE_ALIASES.get(from_ext, [from_ext])
 
-if to_ext and files and st.button(f"🔄 حوّل إلى {to_name}"):
-    try:
-        with st.spinner("جاري التحويل..."):
-            result_files = do_convert(from_ext, to_ext, files)
-        st.success("تم التحويل بنجاح ✅")
+    uploaded = st.file_uploader(
+        f"ارفع ملف {from_name}" + (" (تقدر ترفع أكتر من ملف)" if allow_multi else ""),
+        type=upload_types,
+        accept_multiple_files=allow_multi,
+        key=f"uploader_{from_ext}_{to_ext}",
+    )
+    files = uploaded if isinstance(uploaded, list) else ([uploaded] if uploaded else [])
+
+    if to_ext and files and st.button(f"🔄 حوّل إلى {to_name}"):
+        try:
+            with st.spinner("جاري التحويل..."):
+                result_files = do_convert(from_ext, to_ext, files)
+            st.session_state["_last_result"] = result_files
+            st.session_state["_last_result_ext"] = to_ext
+            st.session_state["_last_result_key"] = f"{from_ext}_{to_ext}_" + ",".join(f.name for f in files)
+            st.success("تم التحويل بنجاح ✅")
+        except Exception as e:
+            st.session_state["_last_result"] = None
+            st.error(f"حصل خطأ أثناء التحويل: {e}")
+
+    # ---- معاينة ثم تحميل — تشوف الناتج جوّه المتصفح الأول قبل ما تنزّله ----
+    current_key = f"{from_ext}_{to_ext}_" + ",".join(f.name for f in files) if files else None
+    result_files = st.session_state.get("_last_result")
+    result_ext = st.session_state.get("_last_result_ext")
+    stored_key = st.session_state.get("_last_result_key")
+    if result_files and stored_key == current_key:
+        st.markdown("#### 👁️ معاينة")
         if len(result_files) == 1:
             (name, data), = result_files.items()
-            st.download_button("⬇️ تحميل الملف", data, file_name=name, mime=MIME.get(to_ext, "application/octet-stream"))
+            render_preview(result_ext, data)
+            st.download_button(
+                "⬇️ تحميل الملف", data, file_name=name,
+                mime=MIME.get(result_ext, "application/octet-stream"),
+            )
         else:
+            render_multi_preview(result_ext, result_files)
             zdata = make_zip(result_files)
-            st.download_button(f"⬇️ تحميل كل الملفات ({len(result_files)}) — ZIP", zdata, file_name="converted_files.zip", mime=MIME["zip"])
-    except Exception as e:
-        st.error(f"حصل خطأ أثناء التحويل: {e}")
+            st.download_button(
+                f"⬇️ تحميل كل الملفات ({len(result_files)}) — ZIP", zdata,
+                file_name="converted_files.zip", mime=MIME["zip"],
+            )
+
+# ============================================================================
+# TAB 2 — معاينة PDF (PDF Review)
+# ============================================================================
+with tab_review:
+    st.markdown("#### 📖 معاينة ملف PDF صفحة بصفحة")
+    review_file = st.file_uploader("ارفع ملف PDF للمعاينة", type=["pdf"], key="review_uploader")
+    if review_file:
+        try:
+            review_data = review_file.getvalue()
+            rdoc = fitz.open(stream=review_data, filetype="pdf")
+            n_pages = len(rdoc)
+            st.caption(f"📄 {review_file.name} — عدد الصفحات: {n_pages}")
+            page_num = st.slider("اختار الصفحة", 1, n_pages, 1) if n_pages > 1 else 1
+            pix = rdoc[page_num - 1].get_pixmap(dpi=140)
+            st.image(pix.tobytes("png"), use_container_width=True, caption=f"صفحة {page_num} من {n_pages}")
+            rdoc.close()
+        except Exception as e:
+            st.error(f"معرفتش أفتح الملف ده: {e}")
+
+# ============================================================================
+# TAB 3 — دمج وحذف صفحات PDF
+# ============================================================================
+with tab_pages:
+    st.markdown("#### 🔗 دمج أكتر من ملف PDF في ملف واحد")
+    merge_files = st.file_uploader(
+        "ارفع ملفات PDF (هتتدمج بنفس الترتيب اللي رفعتها بيه)",
+        type=["pdf"], accept_multiple_files=True, key="merge_uploader",
+    )
+    if merge_files and st.button("🚀 ادمج الملفات"):
+        try:
+            with st.spinner("جاري الدمج..."):
+                out_doc = fitz.open()
+                for uf in merge_files:
+                    src = fitz.open(stream=uf.getvalue(), filetype="pdf")
+                    out_doc.insert_pdf(src)
+                    src.close()
+                buf = io.BytesIO()
+                out_doc.save(buf)
+                out_doc.close()
+                merged_data = buf.getvalue()
+            st.success(f"تم دمج {len(merge_files)} ملفات بنجاح ✅")
+            st.markdown("##### 👁️ معاينة")
+            render_preview("pdf", merged_data)
+            st.download_button(
+                "⬇️ تحميل PDF المدموج", merged_data,
+                file_name="merged.pdf", mime=MIME["pdf"],
+            )
+        except Exception as e:
+            st.error(f"حصل خطأ أثناء الدمج: {e}")
+
+    st.markdown("---")
+    st.markdown("#### 🗑️ حذف صفحات من PDF")
+    delete_file = st.file_uploader("ارفع ملف PDF", type=["pdf"], key="delete_uploader")
+    if delete_file:
+        try:
+            del_data_in = delete_file.getvalue()
+            ddoc = fitz.open(stream=del_data_in, filetype="pdf")
+            n_pages_del = len(ddoc)
+            ddoc.close()
+            st.caption(f"📄 {delete_file.name} — عدد الصفحات: {n_pages_del}")
+            pages_to_delete = st.multiselect(
+                "اختار أرقام الصفحات اللي عايز تحذفها",
+                options=list(range(1, n_pages_del + 1)),
+            )
+            if pages_to_delete and len(pages_to_delete) >= n_pages_del:
+                st.warning("لازم تسيب صفحة واحدة على الأقل في الملف.")
+            elif pages_to_delete and st.button("🚀 احذف الصفحات المختارة"):
+                with st.spinner("جاري الحذف..."):
+                    ddoc = fitz.open(stream=del_data_in, filetype="pdf")
+                    for idx in sorted([p - 1 for p in pages_to_delete], reverse=True):
+                        ddoc.delete_page(idx)
+                    buf = io.BytesIO()
+                    ddoc.save(buf)
+                    ddoc.close()
+                    del_data_out = buf.getvalue()
+                st.success(f"تم حذف {len(pages_to_delete)} صفحة بنجاح ✅")
+                st.markdown("##### 👁️ معاينة")
+                render_preview("pdf", del_data_out)
+                st.download_button(
+                    "⬇️ تحميل PDF بعد الحذف", del_data_out,
+                    file_name="edited.pdf", mime=MIME["pdf"],
+                )
+        except Exception as e:
+            st.error(f"حصل خطأ أثناء التعامل مع الملف: {e}")
+
 
 st.markdown(
     """
