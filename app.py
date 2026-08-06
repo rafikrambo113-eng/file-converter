@@ -408,9 +408,9 @@ def do_convert(from_ext: str, to_ext: str, files) -> dict:
 
 
 # ----------------------------------------------------------------------------
-# UI — تبويبين بس: التحويل (ومعاينة مدمجة لأي صيغة) / أدوات PDF (دمج + حذف صفحات)
+# UI — تبويبين بس: التحويل (ومعاينة مدمجة لأي صيغة) / دمج ملفات PDF
 # ----------------------------------------------------------------------------
-tab_convert, tab_pdf_tools = st.tabs(["🔄 تحويل الصيغ", "🧩 أدوات PDF (دمج / حذف صفحات)"])
+tab_convert, tab_pdf_tools = st.tabs(["🔄 تحويل الصيغ", "🧩 دمج ملفات PDF"])
 
 # ============================================================================
 # TAB 1 — التحويل بين الصيغ، والمعاينة هنا حاجة أساسية لأي صيغة مش خاصية منفصلة
@@ -493,7 +493,7 @@ with tab_convert:
             )
 
 # ============================================================================
-# TAB 2 — أدوات PDF: دمج ملفات + حذف صفحات، مجمّعين في تبويب واحد
+# TAB 2 — دمج ملفات PDF
 # ============================================================================
 with tab_pdf_tools:
     st.markdown("#### 🔗 دمج ملفات في PDF واحد")
@@ -655,47 +655,6 @@ with tab_pdf_tools:
         st.download_button(
             "⬇️ تحميل PDF المدموج", st.session_state["_merge_result"],
             file_name="merged.pdf", mime=MIME["pdf"],
-        )
-
-
-    st.markdown("---")
-    st.markdown("#### 🗑️ حذف صفحات من PDF")
-    delete_file = st.file_uploader("ارفع ملف PDF", type=["pdf"], key="delete_uploader")
-    if delete_file:
-        try:
-            del_data_in = delete_file.getvalue()
-            n_pages_del = len(fitz.open(stream=del_data_in, filetype="pdf"))
-            st.caption(f"📄 {delete_file.name} — عدد الصفحات: {n_pages_del}")
-
-            # ---- معاينة الملف قبل الحذف — تصفح الصفحات وكبّر/صغّر عشان تحدد إيه اللي هتشيله ----
-            st.markdown("##### 👁️ معاينة قبل الحذف")
-            render_preview("pdf", del_data_in, key_prefix="delete_input")
-
-            pages_to_delete = st.multiselect(
-                "اختار أرقام الصفحات اللي عايز تحذفها",
-                options=list(range(1, n_pages_del + 1)),
-            )
-            if pages_to_delete and len(pages_to_delete) >= n_pages_del:
-                st.warning("لازم تسيب صفحة واحدة على الأقل في الملف.")
-            elif pages_to_delete and st.button("🚀 احذف الصفحات المختارة"):
-                with st.spinner("جاري الحذف..."):
-                    ddoc = fitz.open(stream=del_data_in, filetype="pdf")
-                    for idx in sorted([p - 1 for p in pages_to_delete], reverse=True):
-                        ddoc.delete_page(idx)
-                    buf = io.BytesIO()
-                    ddoc.save(buf)
-                    ddoc.close()
-                    st.session_state["_delete_result"] = buf.getvalue()
-                st.success(f"تم حذف {len(pages_to_delete)} صفحة بنجاح ✅")
-        except Exception as e:
-            st.error(f"حصل خطأ أثناء التعامل مع الملف: {e}")
-
-    if st.session_state.get("_delete_result"):
-        st.markdown("##### 👁️ معاينة بعد الحذف")
-        render_preview("pdf", st.session_state["_delete_result"], key_prefix="delete_output")
-        st.download_button(
-            "⬇️ تحميل PDF بعد الحذف", st.session_state["_delete_result"],
-            file_name="edited.pdf", mime=MIME["pdf"],
         )
 
 st.markdown(
